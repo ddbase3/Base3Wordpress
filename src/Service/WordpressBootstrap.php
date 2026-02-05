@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Base3Wordpress;
+namespace Base3Wordpress\Service;
 
 use Base3\Api\IClassMap;
 use Base3\Api\IContainer;

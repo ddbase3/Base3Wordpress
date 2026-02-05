@@ -4,6 +4,8 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
+use Base3Wordpress\Service\WordpressBootstrap;
+
 /**
  * Embedded BASE3 bootstrap for WordPress.
  *
@@ -44,15 +46,21 @@ final class Base3Wordpress {
 		}
 		$frameworkDir .= DIRECTORY_SEPARATOR;
 
+		// WordPress host root (e.g. /var/www/html/)
+		$wpRoot = rtrim((string)ABSPATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
 		if (!defined('DIR_BASE3')) define('DIR_BASE3', $base3Dir);
 		if (!defined('DIR_FRAMEWORK')) define('DIR_FRAMEWORK', $frameworkDir);
 
-		if (!defined('DIR_ROOT')) define('DIR_ROOT', DIR_FRAMEWORK);
-		if (!defined('DIR_CNF')) define('DIR_CNF', DIR_ROOT . 'cnf' . DIRECTORY_SEPARATOR);
-		if (!defined('DIR_SRC')) define('DIR_SRC', DIR_ROOT . 'src' . DIRECTORY_SEPARATOR);
-		if (!defined('DIR_TEST')) define('DIR_TEST', DIR_ROOT . 'test' . DIRECTORY_SEPARATOR);
-		if (!defined('DIR_TPL')) define('DIR_TPL', DIR_ROOT . 'tpl' . DIRECTORY_SEPARATOR);
-		if (!defined('DIR_USERFILES')) define('DIR_USERFILES', DIR_ROOT . 'userfiles' . DIRECTORY_SEPARATOR);
+		// In embedded mode, DIR_ROOT should point to the host system root (WordPress).
+		if (!defined('DIR_ROOT')) define('DIR_ROOT', $wpRoot);
+
+		// Framework paths must be derived from DIR_FRAMEWORK (not DIR_ROOT).
+		if (!defined('DIR_CNF')) define('DIR_CNF', DIR_FRAMEWORK . 'cnf' . DIRECTORY_SEPARATOR);
+		if (!defined('DIR_SRC')) define('DIR_SRC', DIR_FRAMEWORK . 'src' . DIRECTORY_SEPARATOR);
+		if (!defined('DIR_TEST')) define('DIR_TEST', DIR_FRAMEWORK . 'test' . DIRECTORY_SEPARATOR);
+		if (!defined('DIR_TPL')) define('DIR_TPL', DIR_FRAMEWORK . 'tpl' . DIRECTORY_SEPARATOR);
+		if (!defined('DIR_USERFILES')) define('DIR_USERFILES', DIR_FRAMEWORK . 'userfiles' . DIRECTORY_SEPARATOR);
 
 		// Base3 plugins live under wp-content/plugins/base3/<PluginName>/...
 		if (!defined('DIR_PLUGIN')) define('DIR_PLUGIN', DIR_BASE3);
@@ -72,11 +80,11 @@ final class Base3Wordpress {
 	}
 
 	private static function registerAutoloader(): void {
-		if (!defined('DIR_ROOT') || !defined('DIR_SRC')) {
+		if (!defined('DIR_FRAMEWORK') || !defined('DIR_SRC')) {
 			return;
 		}
 
-		$composerAutoload = DIR_ROOT . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
+		$composerAutoload = DIR_FRAMEWORK . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
 		if (file_exists($composerAutoload)) {
 			require_once $composerAutoload;
 		}
@@ -107,17 +115,17 @@ final class Base3Wordpress {
 
 			self::ensureRuntimeDirs();
 
-			if (!class_exists(\Base3Wordpress\WordpressBootstrap::class)) {
+			if (!class_exists(WordpressBootstrap::class)) {
 				return;
 			}
 
-			if (!\Base3Wordpress\WordpressBootstrap::hasOutput($name)) {
+			if (!WordpressBootstrap::hasOutput($name)) {
 				return;
 			}
-
-			$out = \Base3Wordpress\WordpressBootstrap::run();
 
 			$reqOut = isset($_GET['out']) ? (string) $_GET['out'] : 'html';
+			$out = WordpressBootstrap::runName($name, $reqOut);
+
 			if ($reqOut === 'json') {
 				header('Content-Type: application/json; charset=utf-8');
 			}
@@ -144,16 +152,16 @@ final class Base3Wordpress {
 
 				self::ensureRuntimeDirs();
 
-				if (!class_exists(\Base3Wordpress\WordpressBootstrap::class)) {
+				if (!class_exists(WordpressBootstrap::class)) {
 					return '';
 				}
 
-				if (!\Base3Wordpress\WordpressBootstrap::hasOutput($name)) {
+				if (!WordpressBootstrap::hasOutput($name)) {
 					return '';
 				}
 
 				try {
-					$result = \Base3Wordpress\WordpressBootstrap::runName($name, $out !== '' ? $out : 'html');
+					$result = WordpressBootstrap::runName($name, $out !== '' ? $out : 'html');
 				} catch (\Throwable $e) {
 					$result = '';
 				}
@@ -171,9 +179,9 @@ final class Base3Wordpress {
 				$lines[] = 'Base3Wordpress::booted = ' . (self::$booted ? 'true' : 'false');
 
 				$consts = [
+					'DIR_ROOT',
 					'DIR_BASE3',
 					'DIR_FRAMEWORK',
-					'DIR_ROOT',
 					'DIR_CNF',
 					'DIR_SRC',
 					'DIR_TEST',
@@ -187,7 +195,7 @@ final class Base3Wordpress {
 					$lines[] = $c . ' = ' . (defined($c) ? (string)constant($c) : '(undefined)');
 				}
 
-				$lines[] = 'WordpressBootstrap class = ' . (class_exists(\Base3Wordpress\WordpressBootstrap::class) ? 'OK' : 'MISSING');
+				$lines[] = 'WordpressBootstrap class = ' . (class_exists(WordpressBootstrap::class) ? 'OK' : 'MISSING');
 
 				return '<pre>' . esc_html(implode("\n", $lines)) . '</pre>';
 			});

@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Base3Wordpress;
+namespace Base3Wordpress\Service;
 
 use Base3\Api\ISystemService;
 
@@ -34,21 +34,21 @@ final class WordpressSystemService implements ISystemService {
 	}
 
 	/**
-	 * Reads the BASE3 version from the VERSION file in DIR_ROOT.
+	 * Reads the BASE3 version from the VERSION file in DIR_FRAMEWORK.
 	 *
 	 * Rules:
-	 * - If DIR_ROOT is not defined, return "".
+	 * - If DIR_FRAMEWORK is not defined, return "".
 	 * - If the VERSION file is missing or unreadable, return "".
 	 * - The file is expected to contain the version as a single line (e.g. "4.0.1").
 	 * - Content is trimmed; empty result returns "".
 	 * - No exceptions are thrown and no warnings should be emitted.
 	 */
 	protected function getBase3Version(): string {
-		if (!defined('DIR_ROOT')) {
+		if (!defined('DIR_FRAMEWORK')) {
 			return '';
 		}
 
-		$path = rtrim((string) DIR_ROOT, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'VERSION';
+		$path = rtrim((string) DIR_FRAMEWORK, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'VERSION';
 		if (!is_file($path) || !is_readable($path)) {
 			return '';
 		}

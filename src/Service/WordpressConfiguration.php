@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Base3Wordpress;
+namespace Base3Wordpress\Service;
 
 use Base3\Configuration\AbstractConfiguration;
 use Base3\Database\Api\IDatabase;
