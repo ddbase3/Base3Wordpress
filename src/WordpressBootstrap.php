@@ -11,7 +11,6 @@ use Base3\Api\ISystemService;
 use Base3\Accesscontrol\Api\IAccesscontrol;
 use Base3\Configuration\Api\IConfiguration;
 use Base3\Core\PluginClassMap;
-use Base3\Core\Request;
 use Base3\Core\ServiceLocator;
 use Base3\Database\Api\IDatabase;
 use Base3\Hook\HookManager;
@@ -37,7 +36,10 @@ final class WordpressBootstrap {
 		$container
 			->set('servicelocator', $container, IContainer::SHARED)
 			->set(ISystemService::class, fn() => new WordpressSystemService(), IContainer::SHARED)
-			->set(IRequest::class, fn() => Request::fromGlobals(), IContainer::SHARED)
+
+			// Use a WordPress-specific request implementation that can be parameterized safely.
+			->set(IRequest::class, fn() => WordpressRequest::fromGlobals(), IContainer::SHARED)
+
 			->set(IContainer::class, 'servicelocator', IContainer::ALIAS)
 
 			->set(IHookManager::class, fn() => new HookManager(), IContainer::SHARED)
@@ -114,5 +116,54 @@ final class WordpressBootstrap {
 		$serviceSelector = $container->get(IServiceSelector::class);
 
 		return $serviceSelector->go();
+	}
+
+	/**
+	 * Run BASE3 output for a given name/out without touching PHP superglobals.
+	 */
+	public static function runName(string $name, string $out = 'html'): string {
+		$name = trim($name);
+		$out = trim($out);
+
+		if ($name === '') {
+			return '';
+		}
+		if ($out === '') {
+			$out = 'html';
+		}
+
+		self::initOnce();
+
+		$container = self::getContainer();
+		$request = $container->get(IRequest::class);
+
+		// We expect our WordpressRequest, but keep this robust.
+		if (!$request instanceof WordpressRequest) {
+			return self::run();
+		}
+
+		$prevName = $request->get('name', null);
+		$prevOut = $request->get('out', null);
+
+		$request->setGetParam('name', $name);
+		$request->setGetParam('out', $out);
+
+		try {
+			$result = self::run();
+		} finally {
+			if ($prevName === null) {
+				$request->unsetGetParam('name');
+			} else {
+				$request->setGetParam('name', $prevName);
+			}
+
+			if ($prevOut === null) {
+				$request->unsetGetParam('out');
+			} else {
+				$request->setGetParam('out', $prevOut);
+			}
+		}
+
+		return $result;
 	}
 }

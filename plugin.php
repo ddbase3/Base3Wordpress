@@ -11,6 +11,9 @@ if (!defined('ABSPATH')) {
  * - Define directory constants (WordPress-specific)
  * - Register BASE3 autoloader (without global DEBUG echo spam)
  * - Route BASE3 requests via "?name=...&out=..." while handing unknown names back to WordPress
+ * - Register shortcodes:
+ *   - [base3 name="wptest" out="html"]
+ *   - [base3_debug]
  */
 final class Base3Wordpress {
 	private static bool $booted = false;
@@ -25,6 +28,7 @@ final class Base3Wordpress {
 		self::ensureRuntimeDirs();
 		self::registerAutoloader();
 		self::registerWordpressEntryPoint();
+		self::registerWordpressShortcodes();
 	}
 
 	private static function defineConstants(): void {
@@ -59,12 +63,19 @@ final class Base3Wordpress {
 	}
 
 	private static function ensureRuntimeDirs(): void {
+		if (!defined('DIR_TMP')) {
+			return;
+		}
 		if (!is_dir(DIR_TMP)) {
 			@mkdir(DIR_TMP, 0775, true);
 		}
 	}
 
 	private static function registerAutoloader(): void {
+		if (!defined('DIR_ROOT') || !defined('DIR_SRC')) {
+			return;
+		}
+
 		$composerAutoload = DIR_ROOT . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
 		if (file_exists($composerAutoload)) {
 			require_once $composerAutoload;
@@ -94,10 +105,8 @@ final class Base3Wordpress {
 				return;
 			}
 
-			// Ensure BASE3 runtime dirs exist for classmap/cache generation.
 			self::ensureRuntimeDirs();
 
-			// Handover rule: if BASE3 has no output for this name, WordPress continues normally.
 			if (!class_exists(\Base3Wordpress\WordpressBootstrap::class)) {
 				return;
 			}
@@ -106,11 +115,8 @@ final class Base3Wordpress {
 				return;
 			}
 
-			// Run BASE3 routed output and finish the request here.
 			$out = \Base3Wordpress\WordpressBootstrap::run();
 
-			// If "out=json" is requested, set a minimal content-type.
-			// The BASE3 output implementation may still override/emit headers itself.
 			$reqOut = isset($_GET['out']) ? (string) $_GET['out'] : 'html';
 			if ($reqOut === 'json') {
 				header('Content-Type: application/json; charset=utf-8');
@@ -118,6 +124,73 @@ final class Base3Wordpress {
 
 			echo $out;
 			exit;
+		}, 1);
+	}
+
+	private static function registerWordpressShortcodes(): void {
+		add_action('init', function() {
+			add_shortcode('base3', function($atts = [], $content = '', $tag = ''): string {
+				$atts = shortcode_atts([
+					'name' => '',
+					'out' => 'html',
+				], is_array($atts) ? $atts : []);
+
+				$name = trim((string)($atts['name'] ?? ''));
+				$out = trim((string)($atts['out'] ?? 'html'));
+
+				if ($name === '') {
+					return '';
+				}
+
+				self::ensureRuntimeDirs();
+
+				if (!class_exists(\Base3Wordpress\WordpressBootstrap::class)) {
+					return '';
+				}
+
+				if (!\Base3Wordpress\WordpressBootstrap::hasOutput($name)) {
+					return '';
+				}
+
+				try {
+					$result = \Base3Wordpress\WordpressBootstrap::runName($name, $out !== '' ? $out : 'html');
+				} catch (\Throwable $e) {
+					$result = '';
+				}
+
+				if ($out === 'json') {
+					return '<pre>' . esc_html((string)$result) . '</pre>';
+				}
+
+				return (string)$result;
+			});
+
+			add_shortcode('base3_debug', function(): string {
+				$lines = [];
+
+				$lines[] = 'Base3Wordpress::booted = ' . (self::$booted ? 'true' : 'false');
+
+				$consts = [
+					'DIR_BASE3',
+					'DIR_FRAMEWORK',
+					'DIR_ROOT',
+					'DIR_CNF',
+					'DIR_SRC',
+					'DIR_TEST',
+					'DIR_TPL',
+					'DIR_PLUGIN',
+					'DIR_TMP',
+					'DIR_LOCAL',
+				];
+
+				foreach ($consts as $c) {
+					$lines[] = $c . ' = ' . (defined($c) ? (string)constant($c) : '(undefined)');
+				}
+
+				$lines[] = 'WordpressBootstrap class = ' . (class_exists(\Base3Wordpress\WordpressBootstrap::class) ? 'OK' : 'MISSING');
+
+				return '<pre>' . esc_html(implode("\n", $lines)) . '</pre>';
+			});
 		}, 1);
 	}
 }
